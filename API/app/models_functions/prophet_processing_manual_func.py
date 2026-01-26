@@ -1,5 +1,6 @@
 from prophet import Prophet
 import pandas as pd
+import numpy as np
 from API.app.models_functions.make_prediction_dataframe_func import make_prediction_dataframe
 import json
 
@@ -15,12 +16,22 @@ def prophet_processing_manual(params):
         - changepoint_prior_scale: float
     """
     df_train = pd.read_json(params["df_train"], orient='table')
-    
+
     train_df = pd.DataFrame({
         'ds': df_train.index,
         'y': df_train["sensor"].values
     })
-    
+
+    # Обрабатываем экзогенные переменные
+    exog_columns = []
+    if params.get("exog_vars"):
+        df_exog = pd.read_json(params["exog_vars"], orient='table')
+        exog_columns = df_exog.columns.tolist()
+
+        # Добавляем экзогенные переменные в train_df
+        for col in exog_columns:
+            train_df[col] = df_exog[col].values
+
     hyper_params = json.loads(params["hyper_params"])
 
     model = Prophet(
@@ -32,13 +43,23 @@ def prophet_processing_manual(params):
         seasonality_prior_scale=hyper_params.get("seasonality_prior_scale", 10.0),
         changepoint_prior_scale=hyper_params.get("changepoint_prior_scale", 0.05),
     )
-    
+
+    # Добавляем экзогенные переменные как регрессоры
+    for col in exog_columns:
+        model.add_regressor(col)
+
     model.fit(train_df)
-    
+
     future = model.make_future_dataframe(
         periods=params["horizon"],
         freq=pd.infer_freq(df_train.index))
-    
+
+    # Для прогноза добавляем экзогенные переменные (используем последнее значение)
+    if exog_columns:
+        for col in exog_columns:
+            last_value = df_exog[col].iloc[-1]
+            future[col] = last_value
+
     forecast = model.predict(future)
     predictions = forecast.tail(params["horizon"])['yhat']
     

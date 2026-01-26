@@ -13,6 +13,16 @@ def prophet_processing_auto(params):
         'ds': df_train.index,
         'y': df_train["sensor"].values
     })
+
+    # Обрабатываем экзогенные переменные
+    exog_columns = []
+    if params.get("exog_vars"):
+        df_exog = pd.read_json(params["exog_vars"], orient='table')
+        exog_columns = df_exog.columns.tolist()
+
+        # Добавляем экзогенные переменные в train_df
+        for col in exog_columns:
+            train_df[col] = df_exog[col].values
     
     param_grid = {
         'growth': ['linear'],
@@ -44,6 +54,11 @@ def prophet_processing_auto(params):
             try:
                 # Создание и обучение модели
                 model = Prophet(**current_params)
+
+                # Добавляем регрессоры
+                for col in exog_columns:
+                    model.add_regressor(col)
+
                 model.fit(train)
                 
                 # Прогноз на валидационном наборе
@@ -61,18 +76,30 @@ def prophet_processing_auto(params):
                     best_score = score
                     best_params = current_params
                     best_model = model
-                    
-            except Exception as e:
-                print(f"ОШИБКА В ТРАЙ {e}")
+
+            except Exception:
+                pass
     
     # Обучение лучшей модели на всех данных
     final_model = Prophet(**best_params)
+
+    # Добавляем регрессоры
+    for col in exog_columns:
+        final_model.add_regressor(col)
+
     final_model.fit(train_df)
-    
+
     # Прогноз на тестовом наборе
     future = final_model.make_future_dataframe(
-        periods=params["horizon"], 
+        periods=params["horizon"],
         freq=pd.infer_freq(df_train.index))
+
+    # Добавляем экзогенные переменные в future (используем последнее значение)
+    if exog_columns:
+        for col in exog_columns:
+            last_value = df_exog[col].iloc[-1]
+            future[col] = last_value
+
     forecast = final_model.predict(future)
     predictions = forecast.tail(params["horizon"])['yhat']
     

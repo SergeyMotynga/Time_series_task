@@ -366,6 +366,7 @@ def render_forecasting_control_panel(df: pd.DataFrame, training_df: Optional[pd.
 
     st.markdown("#### Целевые параметры:")
     target_sensor = None
+    exog_sensors = []
     if df is not None and not df.empty:
         # Источник доступных сенсоров зависит от текущего отображаемого набора колонок
         available_sensors = st.session_state.get('selected_sensors', st.session_state.get('filtered_df', df).columns.tolist())
@@ -380,6 +381,18 @@ def render_forecasting_control_panel(df: pd.DataFrame, training_df: Optional[pd.
                 index=0,
                 key="target_sensor"
             )
+
+            # Выбор дополнительных признаков (экзогенных переменных)
+            if target_sensor:
+                other_sensors = [s for s in available_sensors if s != target_sensor]
+                if len(other_sensors) > 0:
+                    st.multiselect(
+                        "Дополнительные признаки (опционально)",
+                        options=other_sensors,
+                        default=[],
+                        key="exog_sensors",
+                        help="Выберите дополнительные датчики, которые могут помочь улучшить прогноз. Работает для SARIMA и Prophet."
+                    )
     else:
         st.markdown("Нет информации", unsafe_allow_html=True)
 
@@ -466,6 +479,12 @@ def render_forecasting_control_panel(df: pd.DataFrame, training_df: Optional[pd.
                         st.error("Индекс обучающей выборки должен быть типа DatetimeIndex")
                         return
 
+                    # Формируем экзогенные переменные, если они выбраны
+                    df_exog = None
+                    exog_sensors_list = st.session_state.get('exog_sensors', [])
+                    if exog_sensors_list and len(exog_sensors_list) > 0:
+                        df_exog = training_df[exog_sensors_list].copy()
+
                     # Формируем тестовую часть из рабочей версии данных, чтобы она соответствовала тому, что видно на графике
                     end_training_time = df_train.index.max() if df_train is not None and not df_train.empty else None
                     df_test = None
@@ -492,7 +511,8 @@ def render_forecasting_control_panel(df: pd.DataFrame, training_df: Optional[pd.
                         auto_params=auto_params,
                         horizon=duration,
                         df_train=df_train,
-                        hyper_params=params
+                        hyper_params=params,
+                        exog_vars=df_exog
                     )
 
                     try:
