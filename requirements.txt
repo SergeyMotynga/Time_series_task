@@ -1,0 +1,34 @@
+# Streamlit Dashboard Dependencies
+
+# Core Streamlit
+streamlit>=1.28.0
+
+# Data Processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Visualization
+plotly==5.24.1
+seaborn==0.13.2
+
+# Statistics and Analysis
+scipy>=1.10.0
+statsmodels==0.14.5
+
+# Date/Time Processing
+python-dateutil>=2.8.0
+
+# HTTP Requests (for API calls)
+aiohttp>=3.8.0
+requests>=2.31.0
+httpx==0.28.1
+
+# JSON Processing
+jsonschema>=4.17.0
+pydantic==2.11.7
+
+# Optional: For better performance
+numba>=0.57.0
+
+# Streamlit extensions
+streamlit-plotly-events==0.0.6
