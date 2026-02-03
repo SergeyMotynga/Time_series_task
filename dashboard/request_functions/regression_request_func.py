@@ -71,23 +71,42 @@ def train_regression_model(
     }
 
     try:
+        # Показываем размер отправляемых данных
+        data_size_mb = len(df_json) / (1024 * 1024)
+        if data_size_mb > 10:
+            st.warning(f"⚠️ Размер данных: {data_size_mb:.2f} MB - это может занять время")
+
         response = httpx.post(
             f"{api_url}regression/{model_type}",
             json=payload,
-            timeout=300.0  # 5 минут таймаут
+            timeout=600.0  # 10 минут таймаут для больших данных
         )
 
         if response.status_code == 200:
             return response.json()
+        elif response.status_code == 504:
+            st.error("⏱️ Сервер не успел обработать запрос (Gateway Timeout). Попробуйте уменьшить размер данных или отключить автоподбор.")
+            return {"error": "Gateway Timeout"}
+        elif response.status_code == 502:
+            st.error("🔴 Сервер недоступен (Bad Gateway). Проверьте логи Railway.")
+            return {"error": "Bad Gateway"}
         else:
-            st.error(f"Ошибка API: {response.status_code}")
-            return {"error": f"HTTP {response.status_code}"}
+            error_text = response.text[:500]  # Первые 500 символов ошибки
+            st.error(f"❌ Ошибка API: {response.status_code}")
+            st.error(f"Детали: {error_text}")
+            return {"error": f"HTTP {response.status_code}: {error_text}"}
 
     except httpx.TimeoutException:
-        st.error("Превышено время ожидания ответа от API")
+        st.error("⏱️ Превышено время ожидания ответа от API (10 минут)")
+        st.info("💡 Попробуйте: уменьшить размер данных, отключить автоподбор или увеличить test_size")
         return {"error": "Timeout"}
+    except httpx.ConnectError as e:
+        st.error(f"🔌 Не удалось подключиться к API: {api_url}")
+        st.error(f"Проверьте что сервер запущен: {str(e)}")
+        return {"error": f"Connection error: {str(e)}"}
     except Exception as e:
-        st.error(f"Ошибка при обучении модели: {str(e)}")
+        st.error(f"❌ Непредвиденная ошибка при обучении модели: {str(e)}")
+        st.exception(e)  # Показываем полный traceback
         return {"error": str(e)}
 
 
