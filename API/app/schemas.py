@@ -13,3 +13,12 @@ class ModelRequest(BaseModel):
 class MetricsRequest(BaseModel):
     df_predict: str  # JSON строкас фреймом предсказания
     df_test: str  # JSON строка с фоеймом на котором будет поверяться предсказание
+
+
+class RegressionRequest(BaseModel):
+    df_train: str  # JSON строка с DataFrame (признаки + целевая переменная)
+    target_col: str  # Название колонки с целевой переменной
+    feature_cols: Optional[str] = None  # JSON список признаков (если None, то все кроме target)
+    hyper_params: str  # JSON строка с параметрами модели (или диапазонами для GridSearch)
+    test_size: float = 0.2  # Размер тестовой выборки (0.0-1.0)
+    use_auto_tune: bool = False  # Использовать GridSearchCV для автоподбора параметров

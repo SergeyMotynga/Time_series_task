@@ -2,6 +2,7 @@ import streamlit as st
 from dashboard.components.data_uploader import upload
 from dashboard.pages.analysis_page import render_analysis_page
 from dashboard.pages.forecasting_page import render_forecasting_page
+from dashboard.pages.regression_page import render_regression_page
 import os
 os.environ["STREAMLIT_SERVER_WATCH_FILE_BLACKLIST"] = ".*/__pycache__/.*,.*\\.pyc,.*\\.pyo,.*\\.pyd"
 os.environ["STREAMLIT_SERVER_ENABLE_WATCHER"] = "false"  # Полное отключение при проблемах
@@ -37,7 +38,7 @@ header_cols = st.columns([2, 10])
 with header_cols[0]:
     page = st.radio(
         "Выбор страницы",
-        ["Прогнозирование", "Анализ данных"]
+        ["Прогнозирование", "Анализ данных", "Регрессионный анализ"]
     )
 
 with header_cols[1]:
@@ -46,6 +47,8 @@ with header_cols[1]:
 if page == "Прогнозирование":
     render_forecasting_page(df, outlier_percentage)
 
-
 elif page == "Анализ данных":
     render_analysis_page(df, outlier_percentage)
+
+elif page == "Регрессионный анализ":
+    render_regression_page(df, outlier_percentage)

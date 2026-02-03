@@ -139,5 +139,140 @@
         "max_value": null
       }
     }
+  },
+
+  "linear_regression":
+  {
+    "can_be_auto": false,
+    "type": "regression",
+    "hyper_params":
+    {
+      "fit_intercept": {
+        "dtype": "bool",
+        "description": "добавлять ли свободный член",
+        "default_value": true,
+        "values": [false, true]
+      }
+    }
+  },
+
+  "random_forest":
+  {
+    "can_be_auto": false,
+    "type": "regression",
+    "hyper_params":
+    {
+      "n_estimators": {
+        "dtype": "int",
+        "description": "количество деревьев",
+        "default_value": 100,
+        "min_value": 10,
+        "max_value": 500
+      },
+      "max_depth": {
+        "dtype": "int",
+        "description": "максимальная глубина дерева (null = без ограничений)",
+        "default_value": null,
+        "min_value": 1,
+        "max_value": 50
+      },
+      "min_samples_split": {
+        "dtype": "int",
+        "description": "минимальное количество образцов для разделения узла",
+        "default_value": 2,
+        "min_value": 2,
+        "max_value": 20
+      }
+    }
+  },
+
+  "gradient_boosting":
+  {
+    "can_be_auto": false,
+    "type": "regression",
+    "hyper_params":
+    {
+      "n_estimators": {
+        "dtype": "int",
+        "description": "количество деревьев",
+        "default_value": 100,
+        "min_value": 10,
+        "max_value": 500
+      },
+      "learning_rate": {
+        "dtype": "float",
+        "description": "скорость обучения",
+        "default_value": 0.1,
+        "min_value": 0.001,
+        "max_value": 1.0
+      },
+      "max_depth": {
+        "dtype": "int",
+        "description": "максимальная глубина дерева",
+        "default_value": 3,
+        "min_value": 1,
+        "max_value": 10
+      }
+    }
+  },
+
+  "elastic_net":
+  {
+    "can_be_auto": false,
+    "type": "regression",
+    "hyper_params":
+    {
+      "alpha": {
+        "dtype": "float",
+        "description": "коэффициент регуляризации",
+        "default_value": 1.0,
+        "min_value": 0.0,
+        "max_value": 10.0
+      },
+      "l1_ratio": {
+        "dtype": "float",
+        "description": "баланс между L1 и L2 регуляризацией",
+        "default_value": 0.5,
+        "min_value": 0.0,
+        "max_value": 1.0
+      }
+    }
+  },
+
+  "lightgbm":
+  {
+    "can_be_auto": false,
+    "type": "regression",
+    "hyper_params":
+    {
+      "n_estimators": {
+        "dtype": "int",
+        "description": "количество деревьев",
+        "default_value": 100,
+        "min_value": 10,
+        "max_value": 500
+      },
+      "learning_rate": {
+        "dtype": "float",
+        "description": "скорость обучения",
+        "default_value": 0.1,
+        "min_value": 0.001,
+        "max_value": 1.0
+      },
+      "max_depth": {
+        "dtype": "int",
+        "description": "максимальная глубина дерева",
+        "default_value": -1,
+        "min_value": -1,
+        "max_value": 20
+      },
+      "num_leaves": {
+        "dtype": "int",
+        "description": "максимальное количество листьев",
+        "default_value": 31,
+        "min_value": 2,
+        "max_value": 100
+      }
+    }
   }
 }}

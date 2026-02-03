@@ -5,9 +5,9 @@ import json
 import traceback
 import math
 from pydantic import Field
-from .models_functions.routing_func import routing_func
+from .models_functions.routing_func import routing_func, regression_routing_func
 from .metrics_functions.metrics_func import calculate_metrics
-from .schemas import ModelRequest, MetricsRequest
+from .schemas import ModelRequest, MetricsRequest, RegressionRequest
 
 
 app = FastAPI()
@@ -61,6 +61,32 @@ async def process_metrics(request: MetricsRequest):
     }
 
     return response
+
+#Функция обработки запроса для регрессионных моделей
+@app.post("/api/regression/{model_type}")
+async def process_regression(
+    request: RegressionRequest,
+    model_type: str = Path(..., description="Тип регрессионной модели")
+    ):
+
+    try:
+        result = regression_routing_func(model_type, request)
+        predict_params = result["model_params"]
+        df_predictions = result["predictions"]
+
+        response = {
+            "model_params": predict_params,
+            "df_predictions": df_predictions.to_json(orient='table', date_format='iso'),
+        }
+
+        return response
+
+    except Exception as e:
+        print('Ошибка при обработке регрессии:', e)
+        traceback.print_exc()
+        return {
+            'error': str(e)
+        }
 
 #Функция обработки запроса получения списка предсказаний
 @app.get("/api/models")
