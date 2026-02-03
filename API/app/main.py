@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Path
+from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
 import os
 import json
@@ -11,6 +12,15 @@ from .schemas import ModelRequest, MetricsRequest, RegressionRequest
 
 
 app = FastAPI()
+
+# CORS middleware для доступа из Streamlit Cloud
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 #Функция обработки запроса получения предсказания
