@@ -9,3 +9,5 @@ fastapi
 httpx
 uvicorn
 scikit-learn
+xgboost>=2.0.0
+lightgbm>=4.0.0
