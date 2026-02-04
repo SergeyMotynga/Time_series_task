@@ -4,6 +4,12 @@ FROM python:3.12-slim
 # Устанавливаем рабочую папку внутри контейнера
 WORKDIR /app
 
+# Устанавливаем системные зависимости для научных библиотек
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
 # Копируем список зависимостей и ставим их
 COPY dashboard/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -11,7 +17,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Копируем наши файлы в контейнер
 COPY dashboard dashboard/
 COPY main.py .
-COPY .streamlit.example .streamlit
+COPY .streamlit .streamlit
 
 #RUN mkdir -p .streamlit
 
