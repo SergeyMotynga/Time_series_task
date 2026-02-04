@@ -4,10 +4,14 @@
 import pandas as pd
 import json
 import numpy as np
+import logging
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 from .auto_tune_helper import auto_tune_model
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 def linear_regression_processing(params):

@@ -5,13 +5,22 @@ import os
 import json
 import traceback
 import math
+import logging
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from pydantic import Field
 from .models_functions.routing_func import routing_func, regression_routing_func
 from .metrics_functions.metrics_func import calculate_metrics
 from .schemas import ModelRequest, MetricsRequest, RegressionRequest
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 
 app = FastAPI()
+
+# ThreadPoolExecutor для выполнения долгих операций
+executor = ThreadPoolExecutor(max_workers=4)
 
 # CORS middleware для доступа из Streamlit Cloud
 app.add_middleware(
@@ -80,7 +89,20 @@ async def process_regression(
     ):
 
     try:
-        result = regression_routing_func(model_type, request)
+        logger.info(f"Received regression request for model: {model_type}")
+        logger.info(f"Use auto tune: {request.use_auto_tune}")
+
+        # Выполняем долгую операцию в отдельном потоке
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            executor,
+            regression_routing_func,
+            model_type,
+            request
+        )
+
+        logger.info(f"Model training completed for {model_type}")
+
         predict_params = result["model_params"]
         df_predictions = result["predictions"]
 
@@ -89,10 +111,11 @@ async def process_regression(
             "df_predictions": df_predictions.to_json(orient='table', date_format='iso'),
         }
 
+        logger.info(f"Response prepared successfully for {model_type}")
         return response
 
     except Exception as e:
-        print('Ошибка при обработке регрессии:', e)
+        logger.error(f'Ошибка при обработке регрессии {model_type}: {e}')
         traceback.print_exc()
         return {
             'error': str(e)

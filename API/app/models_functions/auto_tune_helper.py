@@ -3,6 +3,11 @@
 """
 from sklearn.model_selection import GridSearchCV
 import json
+import logging
+import os
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 def auto_tune_model(model, param_grid, X_train, y_train, cv=3):
@@ -23,18 +28,29 @@ def auto_tune_model(model, param_grid, X_train, y_train, cv=3):
     if isinstance(param_grid, str):
         param_grid = json.loads(param_grid)
 
+    # Определяем количество параллельных процессов
+    # На Railway ограничиваем до 2, локально используем все ядра
+    is_railway = os.environ.get('RAILWAY_ENVIRONMENT') is not None
+    n_jobs = 2 if is_railway else -1
+
+    logger.info(f"Starting GridSearchCV with cv={cv}, n_jobs={n_jobs}")
+    logger.info(f"Training data shape: {X_train.shape}")
+    logger.info(f"Parameter grid: {param_grid}")
+
     # GridSearchCV
     grid_search = GridSearchCV(
         estimator=model,
         param_grid=param_grid,
         cv=cv,
         scoring='r2',  # Используем R² для регрессии
-        n_jobs=-1,  # Используем все ядра
-        verbose=0
+        n_jobs=n_jobs,
+        verbose=2 if is_railway else 0
     )
 
     # Обучение
+    logger.info("Starting model training with GridSearchCV...")
     grid_search.fit(X_train, y_train)
+    logger.info(f"GridSearchCV completed. Best score: {grid_search.best_score_:.4f}")
 
     # Возвращаем лучшую модель и параметры
     best_model = grid_search.best_estimator_

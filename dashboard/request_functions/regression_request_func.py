@@ -91,9 +91,8 @@ def train_regression_model(
             st.error("🔴 Сервер недоступен (Bad Gateway). Проверьте логи Railway.")
             return {"error": "Bad Gateway"}
         else:
-            error_text = response.text[:500]  # Первые 500 символов ошибки
-            st.error(f"❌ Ошибка API: {response.status_code}")
-            st.error(f"Детали: {error_text}")
+            error_text = response.text[:500]
+            st.error(f"❌ Ошибка API {response.status_code}: {error_text}")
             return {"error": f"HTTP {response.status_code}: {error_text}"}
 
     except httpx.TimeoutException:
@@ -101,12 +100,10 @@ def train_regression_model(
         st.info("💡 Попробуйте: уменьшить размер данных, отключить автоподбор или увеличить test_size")
         return {"error": "Timeout"}
     except httpx.ConnectError as e:
-        st.error(f"🔌 Не удалось подключиться к API: {api_url}")
-        st.error(f"Проверьте что сервер запущен: {str(e)}")
+        st.error(f"🔌 Не удалось подключиться к API: {api_url}. Проверьте что сервер запущен")
         return {"error": f"Connection error: {str(e)}"}
     except Exception as e:
         st.error(f"❌ Непредвиденная ошибка при обучении модели: {str(e)}")
-        st.exception(e)  # Показываем полный traceback
         return {"error": str(e)}
 
 
