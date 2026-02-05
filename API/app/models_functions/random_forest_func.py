@@ -2,6 +2,7 @@
 Функция обработки для модели Random Forest Regressor
 """
 import pandas as pd
+from io import StringIO
 import json
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
@@ -21,7 +22,7 @@ def random_forest_processing(params):
         dict с predictions и model_params
     """
     # Загрузка данных
-    df = pd.read_json(params["df_train"], orient='table')
+    df = pd.read_json(StringIO(params["df_train"]), orient='table')
     target_col = params["target_col"]
 
     # Определение признаков

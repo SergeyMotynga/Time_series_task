@@ -13,7 +13,7 @@ from .models_functions.routing_func import routing_func, regression_routing_func
 from .metrics_functions.metrics_func import calculate_metrics
 from .schemas import ModelRequest, MetricsRequest, RegressionRequest
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
@@ -69,8 +69,7 @@ async def process_metrics(request: MetricsRequest):
             metrics = None
 
     except Exception as e:
-        print('Ошибка при расчёте метрик:', e)
-        traceback.print_exc()
+        logger.error(f'Ошибка при расчёте метрик: {e}')
         return {
             'error': str(e)
         }
@@ -89,9 +88,6 @@ async def process_regression(
     ):
 
     try:
-        logger.info(f"Received regression request for model: {model_type}")
-        logger.info(f"Use auto tune: {request.use_auto_tune}")
-
         # Выполняем долгую операцию в отдельном потоке
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
@@ -101,8 +97,6 @@ async def process_regression(
             request
         )
 
-        logger.info(f"Model training completed for {model_type}")
-
         predict_params = result["model_params"]
         df_predictions = result["predictions"]
 
@@ -111,14 +105,14 @@ async def process_regression(
             "df_predictions": df_predictions.to_json(orient='table', date_format='iso'),
         }
 
-        logger.info(f"Response prepared successfully for {model_type}")
         return response
 
     except Exception as e:
-        logger.error(f'Ошибка при обработке регрессии {model_type}: {e}')
-        traceback.print_exc()
+        error_msg = str(e)[:200]  # Обрезаем ошибку до 200 символов
+        logger.error(f'Error in {model_type}: {type(e).__name__} - {error_msg}')
+        logger.error(f'Traceback: {traceback.format_exc()[:500]}')  # Только первые 500 символов
         return {
-            'error': str(e)
+            'error': f'{type(e).__name__}: {error_msg}'
         }
 
 #Функция обработки запроса получения списка предсказаний

@@ -19,15 +19,9 @@ COPY dashboard dashboard/
 COPY main.py .
 COPY .streamlit .streamlit
 
-#RUN mkdir -p .streamlit
+# Создаем secrets.toml для Docker с правильным URL API
+RUN echo 'api_url = "http://time_series_api:8000/api/"' > .streamlit/secrets.toml
 
 EXPOSE $PORT
 
-# Создаем config.toml
-#RUN echo "[server]\n\
-#port = ${PORT:-8501}\n\
-#fileWatcherType = \"poll\"" > .streamlit/config.toml
-#
-#RUN echo "api_url = \"http://time_series_api:8000/api/\"" > .streamlit/secrets.toml
-
-CMD sh -c "streamlit run main.py --server.port $PORT --server.address 0.0.0.0"
+CMD sh -c "streamlit run main.py --server.port $PORT --server.address 0.0.0.0 --logger.level=warning"

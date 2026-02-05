@@ -6,7 +6,7 @@ import json
 import logging
 import os
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
@@ -33,9 +33,7 @@ def auto_tune_model(model, param_grid, X_train, y_train, cv=3):
     is_railway = os.environ.get('RAILWAY_ENVIRONMENT') is not None
     n_jobs = 2 if is_railway else -1
 
-    logger.info(f"Starting GridSearchCV with cv={cv}, n_jobs={n_jobs}")
-    logger.info(f"Training data shape: {X_train.shape}")
-    logger.info(f"Parameter grid: {param_grid}")
+    logger.info(f"Starting GridSearchCV (cv={cv}, n_jobs={n_jobs}, data_shape={X_train.shape})")
 
     # GridSearchCV
     grid_search = GridSearchCV(
@@ -44,13 +42,12 @@ def auto_tune_model(model, param_grid, X_train, y_train, cv=3):
         cv=cv,
         scoring='r2',  # Используем R² для регрессии
         n_jobs=n_jobs,
-        verbose=2 if is_railway else 0
+        verbose=0  # Отключаем verbose чтобы не засорять логи
     )
 
     # Обучение
-    logger.info("Starting model training with GridSearchCV...")
     grid_search.fit(X_train, y_train)
-    logger.info(f"GridSearchCV completed. Best score: {grid_search.best_score_:.4f}")
+    logger.info(f"GridSearchCV done: score={grid_search.best_score_:.4f}")
 
     # Возвращаем лучшую модель и параметры
     best_model = grid_search.best_estimator_

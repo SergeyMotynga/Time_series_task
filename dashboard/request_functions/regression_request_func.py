@@ -58,7 +58,20 @@ def train_regression_model(
 
     # Подготовка данных
     df_json = df.to_json(orient='table', date_format='iso')
-    feature_cols_json = json.dumps(feature_cols) if feature_cols else None
+
+    # Преобразуем feature_cols в список если это pandas Series или Index
+    if feature_cols is not None:
+        import pandas as pd
+        if isinstance(feature_cols, (pd.Series, pd.Index)):
+            feature_cols_json = json.dumps(feature_cols.tolist())
+        elif hasattr(feature_cols, 'tolist'):
+            # На случай если это numpy array или другой объект с методом tolist
+            feature_cols_json = json.dumps(feature_cols.tolist())
+        else:
+            feature_cols_json = json.dumps(feature_cols)
+    else:
+        feature_cols_json = None
+
     hyper_params_json = json.dumps(hyper_params)
 
     payload = {

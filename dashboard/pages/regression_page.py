@@ -556,10 +556,10 @@ def render_regression_page(df, outlier_percentage):
             )
 
             if selection_method == "Корреляция":
-                threshold = st.slider("Минимальная корреляция с целевой переменной", 0.0, 1.0, 0.3, 0.05)
+                threshold = st.slider("Минимальная корреляция с целевой переменной", 0.0, 1.0, 0.3, 0.01)
 
                 if st.button("Выполнить отбор"):
-                    selected = select_by_correlation(
+                    selected, correlations = select_by_correlation(
                         st.session_state.regression_df,
                         target_col,
                         threshold=threshold

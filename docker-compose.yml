@@ -2,17 +2,28 @@ services:
   time_series_api_app:
     container_name: time_series_api
     build:
-      context: ./API/
-      dockerfile: Dockerfile_API
+      context: .
+      dockerfile: API/Dockerfile_API
     ports:
       - "${API_PORT:-8000}:8000"  # Внешний порт : внутренний порт (всегда 8000)
     env_file:
       - .env
     volumes:
-      - .:/API/app
+      - ./API/app:/code/API/app
     environment:
       - ENVIRONMENT=${ENVIRONMENT:-development}
       - PORT=8000  # Фиксированный порт внутри контейнера
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   time_series_app:
     container_name: time_series_dashboard
@@ -24,7 +35,19 @@ services:
     env_file:
       - .env
     volumes:
-      - .:/dashboard
+      - ./dashboard:/app/dashboard
+      - ./main.py:/app/main.py
     environment:
       - ENVIRONMENT=${ENVIRONMENT:-development}
       - PORT=${DASHBOARD_PORT:-8501}
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
