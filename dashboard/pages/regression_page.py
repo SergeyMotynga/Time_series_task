@@ -27,6 +27,12 @@ from dashboard.regression.feature_selection import (
     tournament_feature_selection,
     get_consensus_features
 )
+from dashboard.regression.scaling import (
+    apply_standard_scaler,
+    apply_minmax_scaler,
+    apply_robust_scaler,
+    get_scaling_info
+)
 from dashboard.regression.time_shift import (
     find_optimal_shift,
     apply_shifts,
@@ -107,6 +113,7 @@ def render_regression_page(df, outlier_percentage):
         "📈 Визуализация сенсоров",
         "🔍 Анализ корреляций",
         "⚠️ Обработка выбросов",
+        "⚖️ Стандартизация данных",
         "🔧 Создание признаков",
         "🎯 Отбор признаков",
         "🤖 Обучение моделей",
@@ -283,8 +290,143 @@ def render_regression_page(df, outlier_percentage):
             if st.button("Обновить страницу с новыми данными"):
                 st.rerun()
 
-    # ========== Вкладка 5: Создание признаков ==========
+    # ========== Вкладка 5: Стандартизация данных ==========
     with tabs[4]:
+        st.subheader("Стандартизация и нормализация данных")
+
+        st.info("""
+        **Зачем нужна стандартизация?**
+
+        Линейные модели (Linear Regression, Elastic Net) чувствительны к масштабу признаков.
+        Если признаки имеют очень разный масштаб (например, температура ~100, давление ~0.1),
+        модель может неправильно определить важность признаков и коэффициенты.
+
+        Стандартизация приводит все признаки к одному масштабу, что помогает моделям работать лучше.
+        """)
+
+        # Выбор метода стандартизации
+        scaling_method = st.selectbox(
+            "Метод стандартизации",
+            options=[
+                "StandardScaler (Z-score)",
+                "MinMaxScaler (0-1)",
+                "RobustScaler (устойчивый к выбросам)"
+            ],
+            help="Выберите метод стандартизации данных"
+        )
+
+        # Описание методов
+        method_descriptions = {
+            "StandardScaler (Z-score)": """
+            **StandardScaler** - наиболее популярный метод
+            - Приводит данные к mean=0 и std=1
+            - Формула: (x - mean) / std
+            - Рекомендуется для большинства задач
+            - Чувствителен к выбросам
+            """,
+            "MinMaxScaler (0-1)": """
+            **MinMaxScaler** - нормализация в диапазон
+            - Приводит данные к диапазону [0, 1]
+            - Формула: (x - min) / (max - min)
+            - Удобен для нейронных сетей
+            - Очень чувствителен к выбросам
+            """,
+            "RobustScaler (устойчивый к выбросам)": """
+            **RobustScaler** - устойчивая нормализация
+            - Использует медиану и IQR вместо mean и std
+            - Формула: (x - median) / IQR
+            - Устойчив к выбросам
+            - Рекомендуется если есть выбросы
+            """
+        }
+
+        st.markdown(method_descriptions[scaling_method])
+
+        st.markdown("---")
+
+        # Выбор колонок для стандартизации
+        numeric_columns = st.session_state.regression_df.select_dtypes(include=['float64', 'int64']).columns.tolist()
+
+        # По умолчанию выбираем все колонки кроме целевой
+        default_cols = [col for col in numeric_columns if col != target_col]
+
+        columns_to_scale = st.multiselect(
+            "Выберите колонки для стандартизации",
+            options=numeric_columns,
+            default=default_cols,
+            help="Обычно стандартизуют только признаки, целевую переменную оставляют как есть"
+        )
+
+        if not columns_to_scale:
+            st.warning("Выберите хотя бы одну колонку для стандартизации")
+        else:
+            # Показываем текущую статистику
+            st.markdown("**Текущая статистика выбранных признаков:**")
+            current_stats = st.session_state.regression_df[columns_to_scale].describe()
+            st.dataframe(current_stats)
+
+            col1, col2 = st.columns([1, 2])
+
+            with col1:
+                if st.button("Применить стандартизацию", type="primary"):
+                    with st.spinner("Применение стандартизации..."):
+                        # Применяем выбранный метод
+                        if scaling_method == "StandardScaler (Z-score)":
+                            df_scaled, scaler_params = apply_standard_scaler(
+                                st.session_state.regression_df,
+                                columns=columns_to_scale
+                            )
+                        elif scaling_method == "MinMaxScaler (0-1)":
+                            df_scaled, scaler_params = apply_minmax_scaler(
+                                st.session_state.regression_df,
+                                columns=columns_to_scale
+                            )
+                        else:  # RobustScaler
+                            df_scaled, scaler_params = apply_robust_scaler(
+                                st.session_state.regression_df,
+                                columns=columns_to_scale
+                            )
+
+                        # Сохраняем стандартизованные данные
+                        st.session_state.regression_df = df_scaled
+                        st.session_state['scaling_applied'] = True
+                        st.session_state['scaling_params'] = scaler_params
+
+                        st.success("✅ Стандартизация применена!")
+                        st.rerun()
+
+            with col2:
+                if st.session_state.get('scaling_applied', False):
+                    st.success("✅ Данные стандартизованы")
+                    st.info(f"Метод: {st.session_state.get('scaling_params', {}).get('method', 'N/A')}")
+                else:
+                    st.info("Данные еще не стандартизованы")
+
+            # Показываем сравнение если стандартизация применена
+            if st.session_state.get('scaling_applied', False):
+                st.markdown("---")
+                st.markdown("**Статистика после стандартизации:**")
+                scaled_stats = st.session_state.regression_df[columns_to_scale].describe()
+                st.dataframe(scaled_stats)
+
+                st.markdown("**Сравнение до/после:**")
+                # Это показать не можем, т.к. исходные данные уже заменены
+                # Но можем показать что mean близок к 0 и std близок к 1 для StandardScaler
+                if scaling_method == "StandardScaler (Z-score)":
+                    st.info("""
+                    После StandardScaler:
+                    - Mean должен быть близок к 0
+                    - Std должен быть близок к 1
+                    """)
+                elif scaling_method == "MinMaxScaler (0-1)":
+                    st.info("""
+                    После MinMaxScaler:
+                    - Min = 0
+                    - Max = 1
+                    """)
+
+    # ========== Вкладка 6: Создание признаков ==========
+    with tabs[5]:
         st.subheader("Инженерия признаков")
 
         # ===== РАЗДЕЛ 1: Анализ оптимальных сдвигов =====
@@ -537,8 +679,141 @@ def render_regression_page(df, outlier_percentage):
             st.success(f"Добавлено {len(rolling_sensors) * len(rolling_funcs)} rolling-признаков!")
             st.dataframe(st.session_state.regression_df.head())
 
-    # ========== Вкладка 6: Отбор признаков ==========
-    with tabs[5]:
+        # ===== РАЗДЕЛ 4: Временная агрегация (для редких измерений) =====
+        st.markdown("---")
+        st.markdown("## 4️⃣ Временная агрегация (для данных с разной частотой)")
+
+        # Проверка что есть целевая переменная
+        if not target_col:
+            st.warning("Выберите целевую переменную в боковой панели")
+        else:
+            # Импорт функций агрегации
+            try:
+                from dashboard.regression.time_aggregation import (
+                    aggregate_by_target_timestamps,
+                    find_optimal_aggregation_params,
+                    get_target_measurements_info,
+                    analyze_feature_frequency
+                )
+
+                # Анализ частоты измерений
+                st.markdown("### 📊 Анализ частоты измерений")
+
+                if st.button("Показать анализ частоты"):
+                    with st.spinner("Анализ данных..."):
+                        # Анализ для целевой переменной
+                        target_info = get_target_measurements_info(st.session_state.regression_df, target_col)
+
+                        st.markdown(f"**Целевая переменная: `{target_col}`**")
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("Измерений", target_info['count'])
+                        with col2:
+                            avg_h = target_info.get('avg_interval_hours')
+                            st.metric("Средний интервал", f"{avg_h:.1f} ч" if avg_h else "N/A")
+                        with col3:
+                            avg_d = avg_h / 24 if avg_h else 0
+                            st.metric("Средний интервал (дни)", f"{avg_d:.1f}" if avg_h else "N/A")
+                        with col4:
+                            suggested = target_info.get('suggested_window_hours', 24)
+                            st.metric("Рекомендуемое окно", f"{suggested} ч")
+
+                        # Анализ всех признаков
+                        st.markdown("**Частота измерений всех признаков:**")
+                        freq_analysis = analyze_feature_frequency(st.session_state.regression_df)
+                        st.dataframe(freq_analysis, use_container_width=True)
+
+                # Параметры агрегации
+                st.markdown("### ⚙️ Параметры агрегации")
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    window_hours = st.number_input(
+                        "Окно усреднения (часы)",
+                        min_value=1,
+                        max_value=720,  # 30 дней
+                        value=24,
+                        help="Сколько часов данных использовать для усреднения ДО каждого измерения цели"
+                    )
+
+                    agg_funcs = st.multiselect(
+                        "Функции агрегации",
+                        options=['mean', 'std', 'min', 'max', 'last', 'first', 'median', 'count'],
+                        default=['mean', 'std', 'min', 'max'],
+                        help="Статистики для расчета по каждому признаку"
+                    )
+
+                with col2:
+                    shift_hours = st.number_input(
+                        "Временной сдвиг (часы)",
+                        min_value=0,
+                        max_value=72,
+                        value=1,
+                        help="Сдвиг окна назад (компенсация задержки отбора пробы)"
+                    )
+
+                    auto_find = st.checkbox(
+                        "Автоматически найти оптимальные параметры",
+                        value=False,
+                        help="Перебрать разные window/shift и выбрать лучшие по корреляции"
+                    )
+
+                # Кнопка создания агрегированного датасета
+                if auto_find:
+                    if st.button("🔍 Найти оптимальные параметры и создать датасет"):
+                        with st.spinner("Поиск оптимальных параметров..."):
+                            result = find_optimal_aggregation_params(
+                                st.session_state.regression_df,
+                                target_col
+                            )
+
+                            st.success(f"Найдены оптимальные параметры!")
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                st.metric("Окно", f"{result['optimal_window_hours']} ч")
+                            with col2:
+                                st.metric("Сдвиг", f"{result['optimal_shift_hours']} ч")
+                            with col3:
+                                st.metric("Корреляция", f"{result['best_score']:.4f}")
+
+                            # Создаем датасет с оптимальными параметрами
+                            df_aggregated = aggregate_by_target_timestamps(
+                                st.session_state.regression_df,
+                                target_col,
+                                window_hours=result['optimal_window_hours'],
+                                shift_hours=result['optimal_shift_hours'],
+                                agg_functions=agg_funcs
+                            )
+
+                            # Заменяем датасет
+                            st.session_state.regression_df = df_aggregated
+                            st.success(f"✅ Создан агрегированный датасет: {len(df_aggregated)} строк × {len(df_aggregated.columns)} колонок")
+                            st.dataframe(df_aggregated.head())
+                else:
+                    if st.button("📊 Создать агрегированный датасет"):
+                        with st.spinner(f"Агрегация с окном {window_hours}ч и сдвигом {shift_hours}ч..."):
+                            df_aggregated = aggregate_by_target_timestamps(
+                                st.session_state.regression_df,
+                                target_col,
+                                window_hours=window_hours,
+                                shift_hours=shift_hours,
+                                agg_functions=agg_funcs
+                            )
+
+                            # Заменяем датасет
+                            st.session_state.regression_df = df_aggregated
+                            st.success(f"✅ Создан агрегированный датасет: {len(df_aggregated)} строк × {len(df_aggregated.columns)} колонок")
+                            st.dataframe(df_aggregated.head())
+
+                            # Статистика
+                            st.markdown("**Статистика после агрегации:**")
+                            st.dataframe(df_aggregated.describe())
+
+            except ImportError as e:
+                st.error(f"Ошибка импорта модуля time_aggregation: {e}")
+
+    # ========== Вкладка 7: Отбор признаков ==========
+    with tabs[6]:
         st.subheader("Отбор важных признаков")
 
         available_features = [col for col in st.session_state.regression_df.columns if col != target_col]
@@ -644,8 +919,8 @@ def render_regression_page(df, outlier_percentage):
                     st.success("Список признаков обновлен")
                     st.rerun()
 
-    # ========== Вкладка 7: Обучение моделей ==========
-    with tabs[6]:
+    # ========== Вкладка 8: Обучение моделей ==========
+    with tabs[7]:
         st.subheader("Обучение регрессионных моделей")
 
         if not st.session_state.regression_features:
@@ -812,8 +1087,8 @@ def render_regression_page(df, outlier_percentage):
                             st.success("✅ Турнирная валидация завершена! Перейдите на вкладку **'📊 Результаты'** для просмотра сравнения моделей.")
                             st.rerun()
 
-    # ========== Вкладка 8: Результаты ==========
-    with tabs[7]:
+    # ========== Вкладка 9: Результаты ==========
+    with tabs[8]:
         st.subheader("Результаты моделирования")
 
         if not st.session_state.regression_results:
