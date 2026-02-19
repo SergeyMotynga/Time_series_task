@@ -6,38 +6,54 @@ import numpy as np
 from scipy.stats import pearsonr
 
 
+def _shift_by_hours(series, shift_hours):
+    """
+    Сдвигает временной ряд на указанное количество часов (через DatetimeIndex).
+    Значение сенсора в момент (t - shift_hours) присваивается моменту t.
+    """
+    if shift_hours == 0:
+        return series
+    sensor_dropna = series.dropna()
+    shifted_index = sensor_dropna.index + pd.Timedelta(hours=shift_hours)
+    shifted = pd.Series(sensor_dropna.values, index=shifted_index)
+    return shifted.reindex(series.index, method='nearest', tolerance=pd.Timedelta(hours=max(1, shift_hours)))
+
+
 def find_optimal_shift(df, sensor_col, target_col, max_shift=24, metric='correlation'):
     """
-    Находит оптимальный сдвиг для сенсора относительно целевой переменной
+    Находит оптимальный сдвиг для сенсора относительно целевой переменной.
+
+    Если DataFrame имеет DatetimeIndex, сдвиг задаётся в ЧАСАХ через Timedelta.
+    Иначе — в строках (устаревший режим).
 
     Args:
         df: DataFrame с данными
         sensor_col: Название колонки сенсора
         target_col: Название целевой переменной
-        max_shift: Максимальный сдвиг для проверки
+        max_shift: Максимальный сдвиг (часы при DatetimeIndex, строки иначе)
         metric: Метрика для оценки ('correlation', 'mse', 'mae')
 
     Returns:
-        dict с результатами:
-            - optimal_shift: оптимальный сдвиг
+        dict:
+            - optimal_shift: оптимальный сдвиг (часы или строки)
             - shift_scores: словарь {shift: score}
             - best_score: лучший score
     """
     if sensor_col not in df.columns or target_col not in df.columns:
         raise ValueError(f"Колонки {sensor_col} или {target_col} не найдены в DataFrame")
 
+    use_timedelta = isinstance(df.index, pd.DatetimeIndex)
     shift_scores = {}
 
     for shift in range(0, max_shift + 1):
-        if shift == 0:
-            shifted = df[sensor_col]
+        if use_timedelta:
+            shifted = _shift_by_hours(df[sensor_col], shift)
         else:
             shifted = df[sensor_col].shift(shift)
 
-        # Удаляем NaN после сдвига
         mask = ~(shifted.isna() | df[target_col].isna())
 
-        if mask.sum() < 10:  # Минимум 10 точек для расчета
+        if mask.sum() < 10:
             continue
 
         sensor_clean = shifted[mask]
@@ -45,11 +61,11 @@ def find_optimal_shift(df, sensor_col, target_col, max_shift=24, metric='correla
 
         if metric == 'correlation':
             score, _ = pearsonr(sensor_clean, target_clean)
-            score = abs(score)  # Берем абсолютное значение корреляции
+            score = abs(score)
         elif metric == 'mse':
-            score = -np.mean((sensor_clean - target_clean) ** 2)  # Отрицательный MSE (чем больше, тем лучше)
+            score = -np.mean((sensor_clean - target_clean) ** 2)
         elif metric == 'mae':
-            score = -np.mean(np.abs(sensor_clean - target_clean))  # Отрицательный MAE
+            score = -np.mean(np.abs(sensor_clean - target_clean))
         else:
             raise ValueError(f"Неизвестная метрика: {metric}")
 
@@ -102,13 +118,15 @@ def apply_shifts(df, shift_config):
 
 def analyze_shift_impact(df, sensor_col, target_col, shifts_to_test=None):
     """
-    Анализирует влияние различных сдвигов на корреляцию с целевой переменной
+    Анализирует влияние различных сдвигов на корреляцию с целевой переменной.
+
+    При DatetimeIndex сдвиг задаётся в ЧАСАХ, иначе — в строках.
 
     Args:
         df: DataFrame с данными
         sensor_col: Название сенсора
         target_col: Целевая переменная
-        shifts_to_test: Список сдвигов для тестирования (по умолчанию 0-24)
+        shifts_to_test: Список сдвигов для тестирования (часы или строки)
 
     Returns:
         DataFrame с результатами анализа
@@ -116,13 +134,14 @@ def analyze_shift_impact(df, sensor_col, target_col, shifts_to_test=None):
     if shifts_to_test is None:
         shifts_to_test = list(range(0, 25))
 
+    use_timedelta = isinstance(df.index, pd.DatetimeIndex)
     results = []
 
     for shift in shifts_to_test:
-        if shift == 0:
-            shifted = df[sensor_col]
+        if use_timedelta:
+            shifted = _shift_by_hours(df[sensor_col], shift)
         else:
-            shifted = df[sensor_col].shift(shift)
+            shifted = df[sensor_col].shift(shift) if shift > 0 else df[sensor_col]
 
         # Удаляем NaN
         mask = ~(shifted.isna() | df[target_col].isna())
@@ -142,6 +161,7 @@ def analyze_shift_impact(df, sensor_col, target_col, shifts_to_test=None):
 
         results.append({
             'shift': shift,
+            'shift_label': f"{shift}ч" if use_timedelta else str(shift),
             'correlation': corr,
             'abs_correlation': abs(corr),
             'p_value': p_value,
@@ -191,8 +211,11 @@ def create_shifted_features(df, sensor_cols, target_col, auto_find_shifts=True, 
             }
 
             if optimal_shift > 0:
-                new_col_name = f"{sensor}_shift_{optimal_shift}"
-                df_result[new_col_name] = df[sensor].shift(optimal_shift)
+                new_col_name = f"{sensor}_shift_{optimal_shift}h" if isinstance(df.index, pd.DatetimeIndex) else f"{sensor}_shift_{optimal_shift}"
+                if isinstance(df.index, pd.DatetimeIndex):
+                    df_result[new_col_name] = _shift_by_hours(df[sensor], optimal_shift)
+                else:
+                    df_result[new_col_name] = df[sensor].shift(optimal_shift)
         else:
             # Используем фиксированный сдвиг (можно расширить)
             shift_info[sensor] = {'optimal_shift': 0, 'correlation': 0.0}

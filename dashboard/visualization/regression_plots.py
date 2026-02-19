@@ -400,7 +400,10 @@ def plot_correlation_matrix(df, title="Корреляционная матриц
 
 def plot_sensor_graph(df, sensor_col, title=None):
     """
-    График одного сенсора во времени
+    График одного сенсора во времени.
+
+    Для разреженных данных (<= 500 ненулевых значений) автоматически
+    переключается на lines+markers для лучшей читаемости (например, LIMS).
 
     Args:
         df: DataFrame с DatetimeIndex
@@ -412,9 +415,11 @@ def plot_sensor_graph(df, sensor_col, title=None):
     """
     fig = go.Figure()
 
+    series = df[sensor_col].dropna()
+
     fig.add_trace(go.Scatter(
-        x=df.index,
-        y=df[sensor_col],
+        x=series.index,
+        y=series.values,
         mode='lines',
         name=sensor_col,
         line=dict(width=2)
@@ -434,7 +439,11 @@ def plot_sensor_graph(df, sensor_col, title=None):
 
 def plot_multiple_sensors(df, sensor_cols, title="Множественные сенсоры"):
     """
-    График нескольких сенсоров на одном графике
+    График нескольких сенсоров на одном графике.
+
+    Автоматически определяет разреженные ряды (<=500 точек) и рисует их
+    как markers+lines на secondary y-axis, чтобы разные шкалы не давили
+    друг друга (например, LIMS на шкале 7-9 и Temperature на 150).
 
     Args:
         df: DataFrame с DatetimeIndex
@@ -444,32 +453,45 @@ def plot_multiple_sensors(df, sensor_cols, title="Множественные с�
     Returns:
         plotly.graph_objects.Figure
     """
-    fig = go.Figure()
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-    for sensor_col in sensor_cols:
+    # Определяем какие ряды разреженные
+    sparse_cols = [c for c in sensor_cols if df[c].notna().sum() <= 500]
+    dense_cols  = [c for c in sensor_cols if df[c].notna().sum() > 500]
+
+    colors = px.colors.qualitative.Plotly
+
+    for i, col in enumerate(dense_cols):
         fig.add_trace(go.Scatter(
             x=df.index,
-            y=df[sensor_col],
+            y=df[col],
             mode='lines',
-            name=sensor_col,
-            line=dict(width=2)
-        ))
+            name=col,
+            line=dict(width=2, color=colors[i % len(colors)])
+        ), secondary_y=False)
+
+    for i, col in enumerate(sparse_cols):
+        series = df[col].dropna()
+        fig.add_trace(go.Scatter(
+            x=series.index,
+            y=series.values,
+            mode='lines+markers',
+            name=col,
+            line=dict(width=2, color=colors[(len(dense_cols) + i) % len(colors)]),
+            marker=dict(size=9, symbol='circle',
+                        line=dict(width=1, color='white'))
+        ), secondary_y=True)
 
     fig.update_layout(
         title=title,
         xaxis_title='Дата',
-        yaxis_title='Значение',
         hovermode='x unified',
         width=1200,
         height=600,
-        legend=dict(
-            orientation="v",
-            yanchor="top",
-            y=1,
-            xanchor="left",
-            x=1.05
-        )
+        legend=dict(orientation="v", yanchor="top", y=1, xanchor="left", x=1.08)
     )
+    fig.update_yaxes(title_text="Значение (плотные ряды)", secondary_y=False)
+    fig.update_yaxes(title_text="Значение (разреженные ряды)", secondary_y=True)
 
     return fig
 
@@ -517,7 +539,7 @@ def plot_shift_correlation(shift_analysis_df, sensor_name, optimal_shift=None):
 
     fig.update_layout(
         title=f'Корреляция vs Временной сдвиг для {sensor_name}',
-        xaxis_title='Временной сдвиг (периоды)',
+        xaxis_title='Временной сдвиг (часы)',
         yaxis_title='Абсолютная корреляция',
         hovermode='x unified',
         width=1000,
@@ -550,24 +572,33 @@ def plot_shifted_sensor_comparison(df, sensor_col, target_col, shift):
         vertical_spacing=0.12
     )
 
+    from dashboard.regression.time_shift import _shift_by_hours
+
+    sensor_clean = df[sensor_col].dropna()
+    target_clean = df[target_col].dropna()
+
     # Оригинальный сенсор
     fig.add_trace(
-        go.Scatter(x=df.index, y=df[sensor_col], name=sensor_col, line=dict(color='blue')),
+        go.Scatter(x=sensor_clean.index, y=sensor_clean.values, mode='lines', name=sensor_col, line=dict(color='blue')),
         row=1, col=1
     )
     fig.add_trace(
-        go.Scatter(x=df.index, y=df[target_col], name=target_col, line=dict(color='red')),
+        go.Scatter(x=target_clean.index, y=target_clean.values, mode='lines+markers', name=target_col, line=dict(color='red')),
         row=1, col=1
     )
 
     # Сдвинутый сенсор
-    shifted = df[sensor_col].shift(shift)
+    if isinstance(df.index, pd.DatetimeIndex):
+        shifted_series = _shift_by_hours(df[sensor_col], shift).dropna()
+    else:
+        shifted_series = df[sensor_col].shift(shift).dropna()
+
     fig.add_trace(
-        go.Scatter(x=df.index, y=shifted, name=f'{sensor_col} (сдвиг {shift})', line=dict(color='green')),
+        go.Scatter(x=shifted_series.index, y=shifted_series.values, mode='lines', name=f'{sensor_col} (сдвиг {shift}ч)', line=dict(color='green')),
         row=2, col=1
     )
     fig.add_trace(
-        go.Scatter(x=df.index, y=df[target_col], name=target_col, line=dict(color='red'), showlegend=False),
+        go.Scatter(x=target_clean.index, y=target_clean.values, mode='lines+markers', name=target_col, line=dict(color='red'), showlegend=False),
         row=2, col=1
     )
 
@@ -634,7 +665,7 @@ def plot_multiple_shifts_heatmap(df, sensor_cols, target_col, max_shift=24):
 
     fig.update_layout(
         title=f'Тепловая карта корреляций: Сенсоры vs Сдвиги<br>(Цель: {target_col})',
-        xaxis_title='Временной сдвиг (периоды)',
+        xaxis_title='Временной сдвиг (часы)',
         yaxis_title='Сенсор',
         width=1200,
         height=max(400, len(sensor_cols) * 50),

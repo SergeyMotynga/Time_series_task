@@ -174,25 +174,11 @@ def find_optimal_aggregation_params(
             'all_results': DataFrame
         }
     """
-    # Автоопределение кандидатов на основе частоты измерений целевой переменной
-    if window_hours_candidates is None or shift_hours_candidates is None:
-        info = get_target_measurements_info(df, target_col)
-        avg_interval = info.get('avg_interval_hours', 168)
+    if window_hours_candidates is None:
+        window_hours_candidates = [3, 6, 12, 18, 24, 36, 48, 72, 96, 120, 168]
 
-        if window_hours_candidates is None:
-            # Окна: от часа до среднего интервала
-            window_hours_candidates = [
-                max(1, int(avg_interval * 0.1)),
-                max(1, int(avg_interval * 0.25)),
-                max(1, int(avg_interval * 0.5)),
-                max(1, int(avg_interval * 0.75)),
-                max(1, int(avg_interval))
-            ]
-            window_hours_candidates = sorted(list(set(window_hours_candidates)))
-
-        if shift_hours_candidates is None:
-            # Сдвиги: 0, 1, 2, 4, 8 часов
-            shift_hours_candidates = [0, 1, 2, 4, 8]
+    if shift_hours_candidates is None:
+        shift_hours_candidates = [0, 1, 2, 3, 4, 6, 8, 12, 24]
 
     results = []
 

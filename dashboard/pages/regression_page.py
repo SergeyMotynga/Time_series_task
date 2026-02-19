@@ -16,16 +16,9 @@ from dashboard.regression.outlier_processing import (
     handle_outliers,
     analyze_outliers
 )
-from dashboard.regression.lag_features import (
-    create_lag_features,
-    create_rolling_features,
-    find_optimal_lag
-)
 from dashboard.regression.feature_selection import (
     select_by_correlation,
     select_by_rfr,
-    tournament_feature_selection,
-    get_consensus_features
 )
 from dashboard.regression.scaling import (
     apply_standard_scaler,
@@ -54,7 +47,6 @@ from dashboard.visualization.regression_plots import (
     plot_metrics_comparison_table,
     plot_correlation_matrix,
     plot_sensor_graph,
-    plot_multiple_sensors,
     plot_shift_correlation,
     plot_shifted_sensor_comparison,
     plot_multiple_shifts_heatmap
@@ -137,24 +129,15 @@ def render_regression_page(df, outlier_percentage):
     with tabs[1]:
         st.subheader("Графики сенсоров")
 
-        # Выбор сенсоров для визуализации
-        sensors_to_plot = st.multiselect(
-            "Выберите сенсоры для отображения",
+        sensor_to_plot = st.selectbox(
+            "Выберите сенсор для отображения",
             options=st.session_state.regression_df.columns.tolist(),
-            default=[target_col] if target_col else []
+            index=st.session_state.regression_df.columns.tolist().index(target_col) if target_col in st.session_state.regression_df.columns else 0
         )
 
-        if sensors_to_plot:
-            if len(sensors_to_plot) == 1:
-                # Один сенсор
-                fig = plot_sensor_graph(st.session_state.regression_df, sensors_to_plot[0])
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                # Несколько сенсоров
-                fig = plot_multiple_sensors(st.session_state.regression_df, sensors_to_plot)
-                st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("Выберите хотя бы один сенсор для визуализации")
+        if sensor_to_plot:
+            fig = plot_sensor_graph(st.session_state.regression_df, sensor_to_plot)
+            st.plotly_chart(fig, use_container_width=True)
 
     # ========== Вкладка 3: Анализ корреляций ==========
     with tabs[2]:
@@ -168,19 +151,29 @@ def render_regression_page(df, outlier_percentage):
         )
 
         if corr_vars and len(corr_vars) >= 2:
-            fig = plot_correlation_matrix(st.session_state.regression_df[corr_vars])
-            st.plotly_chart(fig, use_container_width=True)
+            df_corr = st.session_state.regression_df[corr_vars].dropna()
+            n_rows = len(df_corr)
 
-            # Показать топ корреляций с целевой переменной
-            if target_col in corr_vars:
-                st.markdown("---")
-                st.subheader(f"Корреляция с целевой переменной '{target_col}'")
-                corr_with_target = st.session_state.regression_df[corr_vars].corr()[target_col].sort_values(ascending=False)
-                corr_df = pd.DataFrame({
-                    'Признак': corr_with_target.index,
-                    'Корреляция': corr_with_target.values
-                })
-                st.dataframe(corr_df)
+            if n_rows < 3:
+                st.warning(
+                    f"После удаления NaN осталось {n_rows} строк — недостаточно для корреляции. "
+                    "Выберите переменные с перекрывающимися ненулевыми значениями "
+                    "или сначала сделайте агрегацию (вкладка «Создание признаков»)."
+                )
+            else:
+                st.caption(f"Корреляция рассчитана по {n_rows} строкам (строки с NaN исключены)")
+                fig = plot_correlation_matrix(df_corr)
+                st.plotly_chart(fig, use_container_width=True)
+
+                if target_col in corr_vars:
+                    st.markdown("---")
+                    st.subheader(f"Корреляция с целевой переменной '{target_col}'")
+                    corr_with_target = df_corr.corr()[target_col].drop(target_col).sort_values(ascending=False)
+                    corr_df = pd.DataFrame({
+                        'Признак': corr_with_target.index,
+                        'Корреляция': corr_with_target.values
+                    })
+                    st.dataframe(corr_df, hide_index=True)
         else:
             st.info("Выберите хотя бы 2 переменные для построения корреляционной матрицы")
 
@@ -457,11 +450,11 @@ def render_regression_page(df, outlier_percentage):
                     )
 
                     max_shift = st.slider(
-                        "Максимальный сдвиг для анализа",
+                        "Максимальный сдвиг (часы)",
                         min_value=1,
-                        max_value=50,
+                        max_value=168,
                         value=24,
-                        help="Количество периодов (строк) для проверки"
+                        help="Максимальный сдвиг в часах для проверки"
                     )
 
                     if st.button("Провести анализ сдвига"):
@@ -488,7 +481,7 @@ def render_regression_page(df, outlier_percentage):
                             # Показываем результаты
                             col1, col2, col3 = st.columns(3)
                             with col1:
-                                st.metric("Оптимальный сдвиг", f"{optimal_shift} периодов")
+                                st.metric("Оптимальный сдвиг", f"{optimal_shift} ч")
                             with col2:
                                 st.metric("Корреляция", f"{best_corr:.4f}")
                             with col3:
@@ -524,9 +517,9 @@ def render_regression_page(df, outlier_percentage):
                     )
 
                     max_shift = st.slider(
-                        "Максимальный сдвиг",
+                        "Максимальный сдвиг (часы)",
                         min_value=1,
-                        max_value=50,
+                        max_value=168,
                         value=24,
                         key="heatmap_max_shift"
                     )
@@ -553,7 +546,7 @@ def render_regression_page(df, outlier_percentage):
                                 )
                                 optimal_shifts.append({
                                     'Сенсор': sensor,
-                                    'Оптимальный сдвиг': result['optimal_shift'],
+                                    'Оптимальный сдвиг (ч)': result['optimal_shift'],
                                     'Корреляция': f"{result['best_score']:.4f}"
                                 })
 
@@ -574,9 +567,9 @@ def render_regression_page(df, outlier_percentage):
                     )
 
                     max_shift_auto = st.slider(
-                        "Максимальный сдвиг для поиска",
+                        "Максимальный сдвиг для поиска (часы)",
                         min_value=1,
-                        max_value=50,
+                        max_value=168,
                         value=24,
                         key="auto_shift_max"
                     )
@@ -613,75 +606,9 @@ def render_regression_page(df, outlier_percentage):
                             st.markdown("**Обновленный датасет:**")
                             st.dataframe(st.session_state.regression_df.head(10))
 
+        # ===== РАЗДЕЛ 2: Временная агрегация (для редких измерений) =====
         st.markdown("---")
-
-        # ===== РАЗДЕЛ 2: Лаг-признаки =====
-        st.markdown("## 2️⃣ Лаг-признаки (ручное создание)")
-        st.info("Лаг-признаки позволяют использовать прошлые значения сенсоров для предсказания")
-
-        col1, col2 = st.columns(2)
-        with col1:
-            lag_sensors = st.multiselect(
-                "Выберите сенсоры для создания лагов",
-                options=[col for col in st.session_state.regression_df.columns if col != target_col],
-                help="Для каких сенсоров создать лаг-признаки"
-            )
-
-        with col2:
-            lag_periods = st.multiselect(
-                "Периоды лагов",
-                options=list(range(1, 25)),
-                default=[1, 2, 3],
-                help="На сколько шагов назад создать признаки (например, 1 = предыдущее значение)"
-            )
-
-        if st.button("Создать лаг-признаки") and lag_sensors and lag_periods:
-            df_with_lags = create_lag_features(
-                st.session_state.regression_df,
-                columns=lag_sensors,
-                lags=lag_periods
-            )
-            st.session_state.regression_df = df_with_lags
-            st.success(f"Добавлено {len(lag_sensors) * len(lag_periods)} лаг-признаков!")
-            st.dataframe(st.session_state.regression_df.head())
-
-        st.markdown("---")
-
-        # ===== РАЗДЕЛ 3: Rolling-признаки =====
-        st.markdown("## 3️⃣ Rolling-признаки (скользящие окна)")
-
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            rolling_sensors = st.multiselect(
-                "Выберите сенсоры для rolling",
-                options=[col for col in st.session_state.regression_df.columns if col != target_col and '_lag_' not in col],
-                key="rolling_sensors"
-            )
-
-        with col2:
-            rolling_window = st.number_input("Размер окна", min_value=2, max_value=50, value=5)
-
-        with col3:
-            rolling_funcs = st.multiselect(
-                "Функции агрегации",
-                options=['mean', 'std', 'min', 'max'],
-                default=['mean']
-            )
-
-        if st.button("Создать rolling-признаки") and rolling_sensors and rolling_funcs:
-            df_with_rolling = create_rolling_features(
-                st.session_state.regression_df,
-                columns=rolling_sensors,
-                windows=rolling_window,
-                funcs=rolling_funcs
-            )
-            st.session_state.regression_df = df_with_rolling
-            st.success(f"Добавлено {len(rolling_sensors) * len(rolling_funcs)} rolling-признаков!")
-            st.dataframe(st.session_state.regression_df.head())
-
-        # ===== РАЗДЕЛ 4: Временная агрегация (для редких измерений) =====
-        st.markdown("---")
-        st.markdown("## 4️⃣ Временная агрегация (для данных с разной частотой)")
+        st.markdown("## 2️⃣ Временная агрегация (для данных с разной частотой)")
 
         # Проверка что есть целевая переменная
         if not target_col:
@@ -729,11 +656,11 @@ def render_regression_page(df, outlier_percentage):
                 col1, col2 = st.columns(2)
                 with col1:
                     window_hours = st.number_input(
-                        "Окно усреднения (часы)",
+                        "Окно агрегации (часы)",
                         min_value=1,
                         max_value=720,  # 30 дней
                         value=24,
-                        help="Сколько часов данных использовать для усреднения ДО каждого измерения цели"
+                        help="Сколько часов данных использовать для агрегации ДО каждого измерения цели"
                     )
 
                     agg_funcs = st.multiselect(
@@ -825,8 +752,7 @@ def render_regression_page(df, outlier_percentage):
                 "Метод отбора признаков",
                 options=[
                     "Корреляция",
-                    "Random Forest (важность)",
-                    "Турнирная валидация (несколько методов)"
+                    "Random Forest (важность)"
                 ]
             )
 
@@ -856,32 +782,6 @@ def render_regression_page(df, outlier_percentage):
                         st.session_state.regression_features = selected
                         st.success(f"Отобрано {len(selected)} признаков")
                         st.write("Выбранные признаки:", selected)
-
-            else:  # Турнирная валидация
-                min_consensus = st.slider(
-                    "Минимальное согласие методов",
-                    1, 3, 2,
-                    help="Сколько методов должны выбрать признак для включения"
-                )
-
-                if st.button("Выполнить турнирную валидацию"):
-                    with st.spinner("Выполнение турнирной валидации..."):
-                        tournament_results = tournament_feature_selection(
-                            st.session_state.regression_df,
-                            target_col
-                        )
-
-                        consensus = get_consensus_features(tournament_results, min_consensus=min_consensus)
-                        st.session_state.regression_features = consensus
-
-                        st.success(f"Отобрано {len(consensus)} признаков с согласием >= {min_consensus}")
-
-                        # Показать результаты каждого метода
-                        st.markdown("**Результаты по методам:**")
-                        for method, features in tournament_results.items():
-                            st.write(f"- {method}: {len(features)} признаков")
-
-                        st.write("Итоговые признаки:", consensus)
 
             # Показать текущий выбор
             if st.session_state.regression_features:
